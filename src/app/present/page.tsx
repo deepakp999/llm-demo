@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -28,9 +28,8 @@ function PresenterContent() {
   const [votes, setVotes] = useState<WordCount[]>([]);
   const [totalVotes, setTotalVotes] = useState(0);
   const [sentenceHistory, setSentenceHistory] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [openingWord, setOpeningWord] = useState("");
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [revealed, setRevealed] = useState(false);
 
   const fetchVotes = useCallback(async () => {
     if (!sessionId || !session) return;
@@ -121,7 +120,11 @@ function PresenterContent() {
     );
   }
 
-  async function finalizeWord() {
+  function revealVotes() {
+    setRevealed(true);
+  }
+
+  async function acceptWord() {
     if (!votes.length || !sessionId || !session) return;
 
     const winningWord = votes[0].word;
@@ -151,21 +154,7 @@ function PresenterContent() {
     );
     setVotes([]);
     setTotalVotes(0);
-  }
-
-  function startCountdown() {
-    setCountdown(10);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          finalizeWord();
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    setRevealed(false);
   }
 
   async function endSession() {
@@ -265,19 +254,38 @@ function PresenterContent() {
           <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-8 flex-1">
             <div className="flex items-center justify-between mb-6">
               <p className="text-xs uppercase tracking-widest text-zinc-500">
-                Live Votes
+                {revealed ? "Vote Results" : "Votes"}
               </p>
               <span className="text-sm text-zinc-400">
                 {totalVotes} vote{totalVotes !== 1 ? "s" : ""} cast
               </span>
             </div>
 
-            {votes.length === 0 ? (
+            {!revealed ? (
               <div className="flex flex-col items-center justify-center h-40 text-zinc-600">
-                <p className="text-lg">Waiting for votes...</p>
-                <p className="text-sm mt-1">
-                  Participants can scan the QR code to join
-                </p>
+                {totalVotes === 0 ? (
+                  <>
+                    <p className="text-lg">Waiting for votes...</p>
+                    <p className="text-sm mt-1">
+                      Participants can scan the QR code to join
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <motion.p
+                      key={totalVotes}
+                      initial={{ scale: 1.3 }}
+                      animate={{ scale: 1 }}
+                      className="text-5xl font-bold text-indigo-400 font-mono"
+                    >
+                      {totalVotes}
+                    </motion.p>
+                    <p className="text-lg mt-2 text-zinc-400">
+                      vote{totalVotes !== 1 ? "s" : ""} received — click Reveal
+                      to see results
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -334,7 +342,7 @@ function PresenterContent() {
           {/* Controls */}
           <div className="flex gap-4">
             {session?.status === "waiting" && (
-              <div className="flex gap-4 items-center">
+              <div className="flex gap-4 items-center w-full">
                 <input
                   type="text"
                   value={openingWord}
@@ -363,19 +371,25 @@ function PresenterContent() {
             )}
             {session?.status === "voting" && (
               <>
-                {countdown !== null ? (
-                  <div className="flex-1 py-4 bg-gradient-to-r from-amber-600 to-orange-600 rounded-xl text-lg font-semibold text-center pulse-glow">
-                    Finalizing in {countdown}s...
-                  </div>
+                {!revealed ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={revealVotes}
+                    disabled={totalVotes === 0}
+                    className="flex-1 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl text-lg font-semibold hover:shadow-indigo-500/25 shadow-xl transition-all disabled:opacity-30 cursor-pointer"
+                  >
+                    Reveal Votes
+                  </motion.button>
                 ) : (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={startCountdown}
+                    onClick={acceptWord}
                     disabled={votes.length === 0}
-                    className="flex-1 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl text-lg font-semibold hover:shadow-indigo-500/25 shadow-xl transition-all disabled:opacity-30 cursor-pointer"
+                    className="flex-1 py-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl text-lg font-semibold hover:shadow-green-500/25 shadow-xl transition-all disabled:opacity-30 cursor-pointer"
                   >
-                    Finalize Word (10s countdown)
+                    Accept &quot;{votes[0]?.word}&quot; &amp; Next Iteration
                   </motion.button>
                 )}
                 <motion.button

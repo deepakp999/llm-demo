@@ -9,13 +9,28 @@ import type { Session } from "@/lib/types";
 const WORD_REGEX = /^[a-zA-Z0-9]+$/;
 const POLL_INTERVAL = 2000;
 
+function getVotedIterations(sessionId: string): Set<number> {
+  try {
+    const stored = localStorage.getItem(`voted-${sessionId}`);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markVoted(sessionId: string, iteration: number) {
+  const voted = getVotedIterations(sessionId);
+  voted.add(iteration);
+  localStorage.setItem(`voted-${sessionId}`, JSON.stringify([...voted]));
+}
+
 export default function VotePage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
   const [session, setSession] = useState<Session | null>(null);
   const [word, setWord] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const lastIterationRef = useRef(0);
+  const prevIterationRef = useRef(0);
   const [error, setError] = useState("");
 
   const fetchSession = useCallback(async () => {
@@ -37,11 +52,19 @@ export default function VotePage() {
       ) {
         return prev;
       }
-      if (updated.current_iteration !== lastIterationRef.current) {
-        setSubmitted(false);
-        setWord("");
-        setError("");
+
+      if (updated.current_iteration !== prevIterationRef.current) {
+        prevIterationRef.current = updated.current_iteration;
+        const alreadyVoted = getVotedIterations(sessionId).has(
+          updated.current_iteration
+        );
+        setSubmitted(alreadyVoted);
+        if (!alreadyVoted) {
+          setWord("");
+          setError("");
+        }
       }
+
       return updated;
     });
   }, [sessionId]);
@@ -73,13 +96,34 @@ export default function VotePage() {
     };
   }, [sessionId, fetchSession]);
 
+  useEffect(() => {
+    if (!session || !sessionId) return;
+    const alreadyVoted = getVotedIterations(sessionId).has(
+      session.current_iteration
+    );
+    if (alreadyVoted) {
+      setSubmitted(true);
+    }
+  }, [session, sessionId]);
+
   async function submitVote() {
     if (!word.trim() || !session) return;
 
     const cleanWord = word.trim();
 
     if (!WORD_REGEX.test(cleanWord)) {
-      setError("Only letters and numbers allowed — no spaces or special characters");
+      setError(
+        "Only letters and numbers allowed — no spaces or special characters"
+      );
+      return;
+    }
+
+    const alreadyVoted = getVotedIterations(sessionId).has(
+      session.current_iteration
+    );
+    if (alreadyVoted) {
+      setError("You already voted this round!");
+      setSubmitted(true);
       return;
     }
 
@@ -94,8 +138,8 @@ export default function VotePage() {
       return;
     }
 
+    markVoted(sessionId, session.current_iteration);
     setSubmitted(true);
-    lastIterationRef.current = session.current_iteration;
     setError("");
   }
 
