@@ -167,14 +167,6 @@ export default function VotePage() {
             <span className="text-3xl">&#10003;</span>
           </div>
           <h1 className="text-3xl font-bold text-white">Session Complete!</h1>
-          <div className="bg-white/5 rounded-2xl border border-white/10 p-6 max-w-sm">
-            <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
-              Final Sentence
-            </p>
-            <p className="text-xl font-medium text-indigo-300">
-              {session.current_sentence || "No words added"}
-            </p>
-          </div>
           <p className="text-zinc-500 text-sm">Thanks for participating!</p>
         </motion.div>
       </div>
