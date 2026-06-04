@@ -29,6 +29,7 @@ function PresenterContent() {
   const [totalVotes, setTotalVotes] = useState(0);
   const [sentenceHistory, setSentenceHistory] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [openingWord, setOpeningWord] = useState("");
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchVotes = useCallback(async () => {
@@ -102,12 +103,19 @@ function PresenterContent() {
   }, [sessionId, session, fetchVotes]);
 
   async function startVoting() {
-    if (!sessionId) return;
+    if (!sessionId || !openingWord.trim()) return;
+    const word = openingWord.trim().toLowerCase();
     await supabase
       .from("sessions")
-      .update({ status: "voting" })
+      .update({
+        status: "voting",
+        current_sentence: word,
+      })
       .eq("id", sessionId);
-    setSession((s) => (s ? { ...s, status: "voting" } : s));
+    setSentenceHistory([word]);
+    setSession((s) =>
+      s ? { ...s, status: "voting", current_sentence: word } : s
+    );
   }
 
   async function finalizeWord() {
@@ -323,14 +331,32 @@ function PresenterContent() {
           {/* Controls */}
           <div className="flex gap-4">
             {session?.status === "waiting" && (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={startVoting}
-                className="flex-1 py-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl text-lg font-semibold hover:shadow-green-500/25 shadow-xl transition-all cursor-pointer"
-              >
-                Open Voting
-              </motion.button>
+              <div className="flex gap-4 items-center">
+                <input
+                  type="text"
+                  value={openingWord}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "" || /^[a-zA-Z0-9]+$/.test(val)) {
+                      setOpeningWord(val);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") startVoting();
+                  }}
+                  placeholder="Enter the opening word..."
+                  className="flex-1 px-6 py-4 bg-white/5 border border-white/20 rounded-xl text-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                />
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={startVoting}
+                  disabled={!openingWord.trim()}
+                  className="px-10 py-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl text-lg font-semibold hover:shadow-green-500/25 shadow-xl transition-all disabled:opacity-30 cursor-pointer"
+                >
+                  Start Voting
+                </motion.button>
+              </div>
             )}
             {session?.status === "voting" && (
               <>
