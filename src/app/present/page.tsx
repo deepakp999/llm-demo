@@ -81,6 +81,8 @@ function PresenterContent() {
 
     fetchVotes();
 
+    const interval = setInterval(fetchVotes, 2000);
+
     const channel = supabase
       .channel(`votes-${sessionId}`)
       .on(
@@ -98,6 +100,7 @@ function PresenterContent() {
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [sessionId, session, fetchVotes]);

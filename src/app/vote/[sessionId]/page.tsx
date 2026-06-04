@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@/lib/types";
 
 const WORD_REGEX = /^[a-zA-Z0-9]+$/;
+const POLL_INTERVAL = 2000;
 
 export default function VotePage() {
   const params = useParams();
@@ -14,22 +15,41 @@ export default function VotePage() {
   const [session, setSession] = useState<Session | null>(null);
   const [word, setWord] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [lastIteration, setLastIteration] = useState(0);
+  const lastIterationRef = useRef(0);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const fetchSession = useCallback(async () => {
     if (!sessionId) return;
+    const { data } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .single();
+    if (!data) return;
+    const updated = data as Session;
 
-    async function loadSession() {
-      const { data } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("id", sessionId)
-        .single();
-      if (data) setSession(data as Session);
-    }
+    setSession((prev) => {
+      if (
+        prev &&
+        prev.status === updated.status &&
+        prev.current_iteration === updated.current_iteration &&
+        prev.current_sentence === updated.current_sentence
+      ) {
+        return prev;
+      }
+      if (updated.current_iteration !== lastIterationRef.current) {
+        setSubmitted(false);
+        setWord("");
+        setError("");
+      }
+      return updated;
+    });
+  }, [sessionId]);
 
-    loadSession();
+  useEffect(() => {
+    fetchSession();
+
+    const interval = setInterval(fetchSession, POLL_INTERVAL);
 
     const channel = supabase
       .channel(`session-${sessionId}`)
@@ -41,22 +61,17 @@ export default function VotePage() {
           table: "sessions",
           filter: `id=eq.${sessionId}`,
         },
-        (payload) => {
-          const updated = payload.new as Session;
-          setSession(updated);
-          if (updated.current_iteration !== lastIteration) {
-            setSubmitted(false);
-            setWord("");
-            setError("");
-          }
+        () => {
+          fetchSession();
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [sessionId, lastIteration]);
+  }, [sessionId, fetchSession]);
 
   async function submitVote() {
     if (!word.trim() || !session) return;
@@ -80,7 +95,7 @@ export default function VotePage() {
     }
 
     setSubmitted(true);
-    setLastIteration(session.current_iteration);
+    lastIterationRef.current = session.current_iteration;
     setError("");
   }
 
